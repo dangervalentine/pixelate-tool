@@ -1,77 +1,108 @@
-# Pixelate Tool
+<p align="center">
+  <img src="src/swatch-finder.svg" width="80" alt="Pixelate Tool" />
+</p>
 
-A sleek, browser-based image pixelation tool. Upload any image, select a region, and apply real-time pixelation — all client-side with zero server uploads.
+<h1 align="center">Pixelate Tool</h1>
 
-**[Try it live on GitHub Pages](https://dangervalentine.github.io/pixelate-tool/)**
+<p align="center">
+  <strong>Pixelate any region of an image, entirely in the browser</strong>
+</p>
+
+<p align="center">
+  <a href="https://dangervalentine.github.io/pixelate-tool">Live Demo</a>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/react-19-61DAFB?logo=react&logoColor=white" alt="React 19" />
+  <img src="https://img.shields.io/badge/vite-6-646CFF?logo=vite&logoColor=white" alt="Vite 6" />
+  <img src="https://img.shields.io/badge/processing-Canvas_API-FFCB6B" alt="Canvas API" />
+  <img src="https://img.shields.io/github/deployments/dangervalentine/pixelate-tool/github-pages?label=deploy&color=C3E88D" alt="Deploy" />
+</p>
 
 ---
 
-## How It Works
-
-Pixelate Tool uses the HTML Canvas API to apply a two-pass pixelation effect:
-
-1. The selected region is extracted and **downsampled** to a tiny resolution based on your pixel size setting
-2. It's then **upscaled** back to the original dimensions with image smoothing disabled, producing the characteristic blocky pixel look
-3. The pixelated region is composited back onto the original image
-
-Everything runs entirely in your browser — your images never leave your device.
+Upload any image, drag a selection region, and apply real-time pixelation with adjustable intensity. All processing happens client-side via the **Canvas API** &mdash; your images never leave your device.
 
 ## Features
 
-- **Region selection** — drag to move, pull corners to resize. Only pixelate what you need, or hit "Full Image" to pixelate everything
-- **Adjustable pixel size** — slider from 1 (subtle) to 100 (heavy) with real-time preview
-- **Drag & drop upload** — drop an image anywhere, or click to browse
-- **Instant download** — hover the preview and save as PNG, preserving your original filename
-- **Dark & light themes** — defaults to dark (Night Owl palette), toggle anytime. Your preference is saved
-- **Fully responsive** — split-view on desktop, stacked layout on mobile with touch support
+**Region Selection** &mdash; Drag to move, pull corners to resize. Pixelate a specific area or hit "Full Image" for the entire photo.
+
+**Adjustable Pixel Size** &mdash; Slider from 1 (subtle) to 100 (heavy) with debounced real-time preview.
+
+**Drag & Drop Upload** &mdash; Drop an image anywhere on the interface or click to browse.
+
+**Instant Download** &mdash; Hover the preview to reveal the download button. Saves as PNG with original filename preserved.
+
+**Theming** &mdash; Dark and light modes with system preference detection, built on the Night Owl color system.
+
+**Fully Responsive** &mdash; Split-view on desktop, stacked layout on mobile with full touch support for selection manipulation.
+
+## How It Works
+
+```
+Image ──► Select Region (or full image)
+              │
+              ▼
+       Extract Region from Canvas
+              │
+              ▼
+       Downsample to Tiny Resolution
+       (based on pixel size setting)
+              │
+              ▼
+       Upscale with Smoothing Disabled
+       (produces blocky pixel effect)
+              │
+              ▼
+       Composite Back onto Original
+              │
+              ▼
+       Export as PNG
+```
+
+The two-pass downsample/upscale approach with `imageSmoothingEnabled: false` produces clean, uniform pixel blocks without interpolation artifacts.
+
+## Quick Start
+
+```bash
+# Install
+npm install
+
+# Develop
+npm run dev
+
+# Build
+npm run build
+
+# Deploy to GitHub Pages
+npm run deploy
+```
 
 ## Tech Stack
 
-| Layer | Tool |
-|-------|------|
-| UI | React 19 |
-| Build | Vite |
-| Styling | CSS with custom design tokens |
-| Hosting | GitHub Pages |
-
-## Getting Started
-
-```bash
-# Clone the repo
-git clone https://github.com/dangervalentine/pixelate-tool.git
-cd pixelate-tool
-
-# Install dependencies
-npm install
-
-# Start the dev server
-npm run dev
-```
-
-### Other commands
-
-| Command | Description |
-|---------|-------------|
-| `npm run build` | Production build to `dist/` |
-| `npm run preview` | Preview the production build locally |
-| `npm run deploy` | Build and deploy to GitHub Pages |
+- **React 19** &mdash; UI with hooks and refs
+- **Vite 6** &mdash; Build tooling and dev server
+- **Canvas API** &mdash; Pixelation rendering and image export
+- **CSS Design Tokens** &mdash; Night Owl theme system
 
 ## Project Structure
 
 ```
 src/
-├── App.jsx            # Main app — canvas logic, state, layout
-├── Header.jsx         # Title bar with theme toggle
-├── Toolbar.jsx        # Pixel size slider and action buttons
-├── Selection.jsx      # Draggable/resizable selection rectangle
-├── theme.js           # Dark/light theme management
-├── tokens.css         # Design tokens (colors, spacing, typography)
-├── App.css            # Component styles
+├── App.jsx                 # Main app — canvas logic, state, layout
+├── Header.jsx              # Title bar with theme toggle
+├── Toolbar.jsx             # Pixel size slider and action buttons
+├── Selection.jsx           # Draggable/resizable selection rectangle
+├── theme.js                # Dark/light mode management
+├── tokens.css              # Design tokens (Night Owl theme)
+├── App.css                 # Component styles
+│
 ├── hooks/
-│   └── useMediaQuery.js
-└── main.jsx           # Entry point
+│   └── useMediaQuery.js    # Responsive breakpoint detection
+│
+└── main.jsx                # Entry point
 ```
 
 ## License
 
-Made by [Danger Valentine](https://github.com/dangervalentine).
+MIT
