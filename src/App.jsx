@@ -9,13 +9,27 @@ import upload from "./upload.svg";
 
 let imgSrc;
 
+const DownloadOverlay = ({ onClick }) => (
+  <div className="download-overlay" onClick={onClick}>
+    <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+      <path
+        d="M16 4v16M16 20l-6-6M16 20l6-6M4 26h24"
+        stroke="currentColor"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+    <span>Download</span>
+  </div>
+);
+
 const App = () => {
   const isMobile = useMediaQuery("(max-width: 800px)");
   const [fileName, setFileName] = useState("");
   const [image, setImage] = useState("");
   const [pixelSize, setPixelSize] = useState(8);
-  const [mode, setMode] = useState("full");
-  const [selectionApplied, setSelectionApplied] = useState(false);
+  const [selectionRect, setSelectionRect] = useState(null);
   const [compositeUrl, setCompositeUrl] = useState(null);
   const photoContainer = useRef(null);
   const imageWrapperRef = useRef(null);
@@ -23,9 +37,7 @@ const App = () => {
   const inputRef = useRef(null);
   const debounceRef = useRef(null);
 
-  const handleFormClick = () => inputRef.current.click();
-
-  const processImg = useCallback(
+  const loadImage = useCallback(
     (file) => {
       if (!file && !imgSrc) return;
 
@@ -33,28 +45,11 @@ const App = () => {
         imgSrc = URL.createObjectURL(file);
       }
 
-      const canvas = canvasRef.current;
-      const ctx = canvas.getContext("2d");
-      const img = new Image();
       setFileName(file?.name ?? fileName);
       setImage(imgSrc);
-
-      img.onload = () => {
-        const height = (canvas.height = img.height);
-        const width = (canvas.width = img.width);
-        const maxDim = Math.max(height, width);
-        const h = Math.round((height * pixelSize) / maxDim);
-        const w = Math.round((width * pixelSize) / maxDim);
-
-        ctx.drawImage(img, 0, 0, w, h);
-        ctx.imageSmoothingEnabled = false;
-        ctx.drawImage(canvas, 0, 0, w, h, 0, 0, width, height);
-
-        setCompositeUrl(canvas.toDataURL("image/png"));
-      };
-      img.src = imgSrc;
+      setSelectionRect({ x: 0, y: 0, w: 100, h: 100 });
     },
-    [canvasRef, fileName, pixelSize]
+    [fileName]
   );
 
   const applySelection = useCallback(
@@ -69,10 +64,8 @@ const App = () => {
         const width = (canvas.width = img.width);
         const height = (canvas.height = img.height);
 
-        // Draw full original image first
         ctx.drawImage(img, 0, 0, width, height);
 
-        // Convert percentage rect to pixel coords
         const sx = Math.round((selRect.x / 100) * width);
         const sy = Math.round((selRect.y / 100) * height);
         const sw = Math.round((selRect.w / 100) * width);
@@ -80,7 +73,6 @@ const App = () => {
 
         if (sw < 1 || sh < 1) return;
 
-        // Pixelate the selection region
         const tempCanvas = document.createElement("canvas");
         tempCanvas.width = sw;
         tempCanvas.height = sh;
@@ -96,36 +88,33 @@ const App = () => {
         tempCtx.imageSmoothingEnabled = false;
         tempCtx.drawImage(tempCanvas, 0, 0, pw, ph, 0, 0, sw, sh);
 
-        // Bake pixelated region into the composite
         ctx.drawImage(tempCanvas, 0, 0, sw, sh, sx, sy, sw, sh);
 
         setCompositeUrl(canvas.toDataURL("image/png"));
-        setSelectionApplied(true);
       };
       img.src = imgSrc;
     },
     [canvasRef, pixelSize]
   );
 
-  const clearSelection = useCallback(() => {
-    setSelectionApplied(false);
-    setCompositeUrl(null);
-    processImg();
-  }, [processImg]);
+  useEffect(() => {
+    if (!selectionRect) return;
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      applySelection(selectionRect);
+    }, 80);
+    return () => clearTimeout(debounceRef.current);
+  }, [selectionRect, pixelSize, applySelection]);
 
   const onChange = (e) => {
     if (!e.target.files.length) return;
-    setSelectionApplied(false);
-    setCompositeUrl(null);
-    processImg(e.target.files[0]);
+    loadImage(e.target.files[0]);
   };
 
   const onDrop = (e) => {
     e.preventDefault();
     if (!e.dataTransfer) return;
-    setSelectionApplied(false);
-    setCompositeUrl(null);
-    processImg(e.dataTransfer.files[0]);
+    loadImage(e.dataTransfer.files[0]);
     photoContainer.current.classList.remove("drag-over");
   };
 
@@ -139,18 +128,8 @@ const App = () => {
     photoContainer.current.classList.remove("drag-over");
   };
 
-  // Debounced reprocess for full image mode only
-  useEffect(() => {
-    if (selectionApplied) return;
-    if (mode === "selection") return;
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      processImg();
-    }, 150);
-    return () => clearTimeout(debounceRef.current);
-  }, [processImg, pixelSize, mode, selectionApplied]);
-
   const downloadImage = () => {
+    if (!canvasRef.current) return;
     const a = document.createElement("a");
     a.href = canvasRef.current.toDataURL("image/png");
     a.download = fileName;
@@ -160,72 +139,145 @@ const App = () => {
   };
 
   const hasImage = fileName !== "";
+  const canDownload = hasImage && compositeUrl;
 
-  // Determine which image to show
-  const displaySrc = compositeUrl || image;
+  const onSelectionChange = useCallback((rect) => {
+    setSelectionRect(rect);
+  }, []);
 
-  // In selection mode (not yet applied): show selection overlay
-  const showSelectionOverlay = mode === "selection" && hasImage && !selectionApplied;
+  const handleOriginalPaneClick = useCallback(() => {
+    if (!hasImage) {
+      inputRef.current?.click();
+    }
+  }, [hasImage]);
 
-  const imageEl =
-    image === "" ? (
-      <div>
-        <img src={upload} alt="upload" />
-        <div className="image-text">
-          <span className="bold">Choose a file</span> &nbsp;
-          {!isMobile && "or drag it here"}
-          <div className="tagline">
-            Pixelate images or select regions to pixelate
-          </div>
-        </div>
-      </div>
+  const rightSrc = compositeUrl || image;
+
+  let helperContent;
+  if (!hasImage) {
+    helperContent = (
+      <span className="helper-step">Drop an image here or click to upload</span>
+    );
+  } else {
+    helperContent = isMobile ? (
+      <span className="helper-step">Drag to move, pull corners to resize</span>
     ) : (
-      <div ref={imageWrapperRef} className="image-wrapper">
-        <img className="image-file" src={displaySrc} alt="uploaded file" />
-        {showSelectionOverlay && (
-          <Selection
-            onApply={applySelection}
-            onCancel={() => {}}
-            containerRef={imageWrapperRef}
-          />
+      <>
+        <span className="helper-step">Drag selection to move</span>
+        <span className="helper-dot" />
+        <span className="helper-step">Pull corners to resize</span>
+        <span className="helper-dot" />
+        <span className="helper-step">Hover preview to save</span>
+      </>
+    );
+  }
+
+  const desktopView = (
+    <div className="split-view">
+      <div className="split-pane original-pane" onClick={handleOriginalPaneClick}>
+        <div className="pane-label">{hasImage ? "Original" : "Upload"}</div>
+        {hasImage ? (
+          <div ref={imageWrapperRef} className="image-wrapper">
+            <img className="image-file" src={image} alt="original" />
+            <Selection
+              rect={selectionRect}
+              onChange={onSelectionChange}
+              containerRef={imageWrapperRef}
+            />
+          </div>
+        ) : (
+          <div className="empty-state">
+            <img src={upload} alt="upload" />
+            <div className="image-text">
+              <span className="bold">Choose a file</span>
+              <div className="tagline">or drag it here</div>
+            </div>
+          </div>
         )}
       </div>
-    );
+      <div className="split-pane preview-pane">
+        <div className="pane-label">Preview</div>
+        {hasImage ? (
+          <div className="image-wrapper downloadable">
+            <img
+              className="image-file preview-img"
+              src={rightSrc}
+              alt="pixelated preview"
+            />
+            {canDownload && <DownloadOverlay onClick={downloadImage} />}
+          </div>
+        ) : (
+          <div className="empty-preview">
+            <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+              <rect x="4" y="4" width="40" height="40" rx="4" stroke="currentColor" strokeWidth="1.5" strokeDasharray="4 3" />
+              <rect x="12" y="12" width="10" height="10" rx="1" fill="currentColor" opacity="0.15" />
+              <rect x="26" y="12" width="10" height="10" rx="1" fill="currentColor" opacity="0.15" />
+              <rect x="12" y="26" width="10" height="10" rx="1" fill="currentColor" opacity="0.15" />
+              <rect x="26" y="26" width="10" height="10" rx="1" fill="currentColor" opacity="0.15" />
+            </svg>
+            <span>Your pixelated result will appear here</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  const mobileView = hasImage ? (
+    <div className="mobile-center">
+      <div ref={imageWrapperRef} className="image-wrapper downloadable">
+        <img
+          className="image-file"
+          src={compositeUrl || image}
+          alt="pixelated"
+        />
+        <Selection
+          rect={selectionRect}
+          onChange={onSelectionChange}
+          containerRef={imageWrapperRef}
+        />
+        {canDownload && (
+          <DownloadOverlay onClick={downloadImage} />
+        )}
+      </div>
+    </div>
+  ) : null;
 
   return (
-    <div>
+    <div className="app-shell">
       <Header />
       <Toolbar
         hasImage={hasImage}
         pixelSize={pixelSize}
         onPixelSizeChange={setPixelSize}
-        mode={mode}
-        onModeChange={(newMode) => {
-          if (newMode !== "selection") {
-            clearSelection();
-          }
-          setMode(newMode);
-        }}
-        onDownload={downloadImage}
+        onChangeImage={() => inputRef.current?.click()}
+        onFullImage={() => setSelectionRect({ x: 0, y: 0, w: 100, h: 100 })}
         isMobile={isMobile}
-        selectionApplied={selectionApplied}
-        onClearSelection={clearSelection}
       />
+      <div className="helper-bar">
+        <div className="helper-text">{helperContent}</div>
+      </div>
       <div className="container">
         <div
           ref={photoContainer}
-          className="photo-container full-width"
+          className="photo-container"
           onDragOver={onDragOver}
           onDragLeave={onDragLeave}
           onDrop={onDrop}
         >
-          <div
-            className={`photo${image === "" ? " border" : ""}`}
-            onClick={showSelectionOverlay ? undefined : handleFormClick}
-          >
-            {imageEl}
-            <canvas ref={canvasRef} className="main-canvas" />
-          </div>
+          {isMobile ? (
+            hasImage ? mobileView : (
+              <div className="photo border" onClick={() => inputRef.current?.click()}>
+                <div className="empty-state">
+                  <img src={upload} alt="upload" />
+                  <div className="image-text">
+                    <span className="bold">Choose a file</span>
+                    <div className="tagline">or drag it here</div>
+                  </div>
+                </div>
+              </div>
+            )
+          ) : desktopView}
+          <canvas ref={canvasRef} className="main-canvas" />
         </div>
         <input
           ref={inputRef}

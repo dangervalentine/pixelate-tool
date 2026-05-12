@@ -1,11 +1,11 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 
-const Selection = ({ onApply, onCancel, containerRef }) => {
-  const [rect, setRect] = useState(null);
-  const [drawing, setDrawing] = useState(false);
+const Selection = ({ rect, onChange, containerRef }) => {
   const [dragging, setDragging] = useState(null);
   const startRef = useRef(null);
-  const rectRef = useRef(null);
+  const rectRef = useRef(rect);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
 
   useEffect(() => {
     rectRef.current = rect;
@@ -28,87 +28,66 @@ const Selection = ({ onApply, onCancel, containerRef }) => {
 
   const onPointerDown = useCallback(
     (e) => {
+      if (!rectRef.current) return;
       e.preventDefault();
       const pos = getRelativePos(e);
+      const r = rectRef.current;
 
-      if (rectRef.current) {
-        const r = rectRef.current;
-        const inX = pos.x >= r.x && pos.x <= r.x + r.w;
-        const inY = pos.y >= r.y && pos.y <= r.y + r.h;
+      const nearLeft = Math.abs(pos.x - r.x) < 5;
+      const nearRight = Math.abs(pos.x - (r.x + r.w)) < 5;
+      const nearTop = Math.abs(pos.y - r.y) < 5;
+      const nearBottom = Math.abs(pos.y - (r.y + r.h)) < 5;
 
-        const nearLeft = Math.abs(pos.x - r.x) < 5;
-        const nearRight = Math.abs(pos.x - (r.x + r.w)) < 5;
-        const nearTop = Math.abs(pos.y - r.y) < 5;
-        const nearBottom = Math.abs(pos.y - (r.y + r.h)) < 5;
+      if (nearTop && nearLeft) { setDragging("nw"); startRef.current = pos; return; }
+      if (nearTop && nearRight) { setDragging("ne"); startRef.current = pos; return; }
+      if (nearBottom && nearLeft) { setDragging("sw"); startRef.current = pos; return; }
+      if (nearBottom && nearRight) { setDragging("se"); startRef.current = pos; return; }
 
-        if (nearTop && nearLeft) { setDragging("nw"); startRef.current = pos; return; }
-        if (nearTop && nearRight) { setDragging("ne"); startRef.current = pos; return; }
-        if (nearBottom && nearLeft) { setDragging("sw"); startRef.current = pos; return; }
-        if (nearBottom && nearRight) { setDragging("se"); startRef.current = pos; return; }
+      const inX = pos.x >= r.x && pos.x <= r.x + r.w;
+      const inY = pos.y >= r.y && pos.y <= r.y + r.h;
 
-        if (inX && inY) { setDragging("move"); startRef.current = pos; return; }
-
-        // Clicked outside — start a new selection
-        setRect(null);
-      }
-
-      setDrawing(true);
-      startRef.current = pos;
-      setRect({ x: pos.x, y: pos.y, w: 0, h: 0 });
+      if (inX && inY) { setDragging("move"); startRef.current = pos; return; }
     },
     [getRelativePos]
   );
 
   const onPointerMove = useCallback(
     (e) => {
-      if (!startRef.current) return;
+      if (!startRef.current || !dragging || !rectRef.current) return;
       e.preventDefault();
       const pos = getRelativePos(e);
+      const dx = pos.x - startRef.current.x;
+      const dy = pos.y - startRef.current.y;
+      const r = { ...rectRef.current };
 
-      if (drawing) {
-        const x = Math.min(startRef.current.x, pos.x);
-        const y = Math.min(startRef.current.y, pos.y);
-        const w = Math.abs(pos.x - startRef.current.x);
-        const h = Math.abs(pos.y - startRef.current.y);
-        setRect({ x, y, w, h });
-        return;
+      switch (dragging) {
+        case "move":
+          r.x = Math.max(0, Math.min(100 - r.w, r.x + dx));
+          r.y = Math.max(0, Math.min(100 - r.h, r.y + dy));
+          break;
+        case "nw": r.x += dx; r.y += dy; r.w -= dx; r.h -= dy; break;
+        case "ne": r.y += dy; r.w += dx; r.h -= dy; break;
+        case "sw": r.x += dx; r.w -= dx; r.h += dy; break;
+        case "se": r.w += dx; r.h += dy; break;
       }
 
-      if (dragging && rectRef.current) {
-        const dx = pos.x - startRef.current.x;
-        const dy = pos.y - startRef.current.y;
-        const r = { ...rectRef.current };
+      if (r.w < 2) r.w = 2;
+      if (r.h < 2) r.h = 2;
 
-        switch (dragging) {
-          case "move":
-            r.x = Math.max(0, Math.min(100 - r.w, r.x + dx));
-            r.y = Math.max(0, Math.min(100 - r.h, r.y + dy));
-            break;
-          case "nw": r.x += dx; r.y += dy; r.w -= dx; r.h -= dy; break;
-          case "ne": r.y += dy; r.w += dx; r.h -= dy; break;
-          case "sw": r.x += dx; r.w -= dx; r.h += dy; break;
-          case "se": r.w += dx; r.h += dy; break;
-        }
-
-        if (r.w < 2) r.w = 2;
-        if (r.h < 2) r.h = 2;
-
-        setRect(r);
-        startRef.current = pos;
-      }
+      onChangeRef.current(r);
+      startRef.current = pos;
     },
-    [drawing, dragging, getRelativePos]
+    [dragging, getRelativePos]
   );
 
   const onPointerUp = useCallback(() => {
-    setDrawing(false);
     setDragging(null);
     startRef.current = null;
   }, []);
 
   useEffect(() => {
     const handler = () => {
-      if (drawing || dragging) onPointerUp();
+      if (dragging) onPointerUp();
     };
     window.addEventListener("mouseup", handler);
     window.addEventListener("touchend", handler);
@@ -116,9 +95,9 @@ const Selection = ({ onApply, onCancel, containerRef }) => {
       window.removeEventListener("mouseup", handler);
       window.removeEventListener("touchend", handler);
     };
-  }, [drawing, dragging, onPointerUp]);
+  }, [dragging, onPointerUp]);
 
-  const hasValidRect = rect && rect.w > 1 && rect.h > 1;
+  if (!rect || rect.w < 1 || rect.h < 1) return null;
 
   return (
     <div
@@ -127,45 +106,26 @@ const Selection = ({ onApply, onCancel, containerRef }) => {
       onMouseMove={onPointerMove}
       onTouchStart={onPointerDown}
       onTouchMove={onPointerMove}
+      onClick={(e) => e.stopPropagation()}
     >
-      {hasValidRect && (
-        <>
-          <div
-            className="selection-rect"
-            style={{
-              left: `${rect.x}%`,
-              top: `${rect.y}%`,
-              width: `${rect.w}%`,
-              height: `${rect.h}%`,
-              background: "transparent",
-              boxShadow: `0 0 0 9999px var(--bg-scrim)`,
-              pointerEvents: "auto",
-              cursor: "move",
-            }}
-          >
-            <div className="selection-handle nw" />
-            <div className="selection-handle ne" />
-            <div className="selection-handle sw" />
-            <div className="selection-handle se" />
-          </div>
-          {!drawing && !dragging && (
-            <div className="selection-actions" onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()}>
-              <button
-                className="selection-apply"
-                onClick={() => onApply(rect)}
-              >
-                Apply
-              </button>
-              <button
-                className="selection-cancel"
-                onClick={() => { setRect(null); onCancel(); }}
-              >
-                Cancel
-              </button>
-            </div>
-          )}
-        </>
-      )}
+      <div
+        className="selection-rect"
+        style={{
+          left: `${rect.x}%`,
+          top: `${rect.y}%`,
+          width: `${rect.w}%`,
+          height: `${rect.h}%`,
+          background: "transparent",
+          boxShadow: `0 0 0 9999px var(--color-bg-scrim)`,
+          pointerEvents: "auto",
+          cursor: "move",
+        }}
+      >
+        <div className="selection-handle nw" />
+        <div className="selection-handle ne" />
+        <div className="selection-handle sw" />
+        <div className="selection-handle se" />
+      </div>
     </div>
   );
 };
