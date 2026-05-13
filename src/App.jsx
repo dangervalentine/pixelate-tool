@@ -2,6 +2,7 @@ import { useEffect, useCallback, useState, useRef } from "react";
 import Header from "./Header";
 import Toolbar from "./Toolbar";
 import Selection from "./Selection";
+import { GithubAttribution } from "./GithubAttribution";
 import { useMediaQuery } from "./hooks/useMediaQuery";
 
 import "./App.css";
@@ -286,6 +287,7 @@ const App = () => {
           onChange={onChange}
         />
       </div>
+      <GithubAttribution />
     </div>
   );
 };
