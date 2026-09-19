@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="src/swatch-finder.svg" width="80" alt="Pixelate Tool" />
+  <img src="./public/favicon.svg" width="80" alt="Pixelate Tool" />
 </p>
 
 <h1 align="center">Pixelate Tool</h1>
