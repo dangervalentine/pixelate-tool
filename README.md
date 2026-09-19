@@ -13,6 +13,16 @@
 </p>
 
 <p align="center">
+  <a href="https://dangervalentine.github.io/pixelate-tool">
+    <img
+      src="./public/pixelate-tool.png"
+      width="720"
+      alt="Pixelate Tool title art: the wordmark beside a photograph with the subject's head resampled into blocks, a panel of colours surviving each slider position, and a ladder of the same crop from four to sixty-four blocks."
+    />
+  </a>
+</p>
+
+<p align="center">
   <img src="https://img.shields.io/badge/react-19-61DAFB?logo=react&logoColor=white" alt="React 19" />
   <img src="https://img.shields.io/badge/vite-6-646CFF?logo=vite&logoColor=white" alt="Vite 6" />
   <img src="https://img.shields.io/badge/processing-Canvas_API-FFCB6B" alt="Canvas API" />
