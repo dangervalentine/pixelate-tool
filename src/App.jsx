@@ -225,7 +225,7 @@ const App = () => {
 
   const mobileView = hasImage ? (
     <div className="mobile-center">
-      <div ref={imageWrapperRef} className="image-wrapper downloadable">
+      <div ref={imageWrapperRef} className="image-wrapper">
         <img
           className="image-file"
           src={compositeUrl || image}
@@ -236,22 +236,23 @@ const App = () => {
           onChange={onSelectionChange}
           containerRef={imageWrapperRef}
         />
-        {canDownload && (
-          <DownloadOverlay onClick={downloadImage} />
-        )}
       </div>
     </div>
   ) : null;
 
   return (
     <div className="app-shell">
-      <Header />
+      <Header
+        onUpload={isMobile ? () => inputRef.current?.click() : undefined}
+      />
       <Toolbar
         hasImage={hasImage}
         pixelSize={pixelSize}
         onPixelSizeChange={setPixelSize}
         onChangeImage={() => inputRef.current?.click()}
         onFullImage={() => setSelectionRect({ x: 0, y: 0, w: 100, h: 100 })}
+        onDownload={downloadImage}
+        canDownload={Boolean(canDownload)}
         isMobile={isMobile}
       />
       <div className="helper-bar">

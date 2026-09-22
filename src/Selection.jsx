@@ -1,126 +1,151 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useRef, useCallback } from "react";
+
+// Grab distance for corners, in screen pixels. Fingers need a bigger target.
+const HANDLE_REACH = { touch: 28, pen: 16, mouse: 10 };
+const MIN_SIZE = 2; // percent
+
+const clampRect = (r) => {
+  const w = Math.min(100, Math.max(MIN_SIZE, r.w));
+  const h = Math.min(100, Math.max(MIN_SIZE, r.h));
+  return {
+    x: Math.min(100 - w, Math.max(0, r.x)),
+    y: Math.min(100 - h, Math.max(0, r.y)),
+    w,
+    h,
+  };
+};
+
+// Resize from a corner, keeping the opposite corner fixed and the rect inside the image.
+const resize = (start, mode, dx, dy) => {
+  let left = start.x;
+  let top = start.y;
+  let right = start.x + start.w;
+  let bottom = start.y + start.h;
+
+  if (mode.includes("w")) left = Math.min(right - MIN_SIZE, Math.max(0, left + dx));
+  if (mode.includes("e")) right = Math.max(left + MIN_SIZE, Math.min(100, right + dx));
+  if (mode.includes("n")) top = Math.min(bottom - MIN_SIZE, Math.max(0, top + dy));
+  if (mode.includes("s")) bottom = Math.max(top + MIN_SIZE, Math.min(100, bottom + dy));
+
+  return { x: left, y: top, w: right - left, h: bottom - top };
+};
 
 const Selection = ({ rect, onChange, containerRef }) => {
-  const [dragging, setDragging] = useState(null);
-  const startRef = useRef(null);
-  const rectRef = useRef(rect);
+  // { mode, pointerId, startPos, startRect } while a drag is in progress
+  const dragRef = useRef(null);
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
 
-  useEffect(() => {
-    rectRef.current = rect;
-  }, [rect]);
-
   const getRelativePos = useCallback(
     (e) => {
-      const el = containerRef.current;
-      if (!el) return { x: 0, y: 0 };
-      const bounds = el.getBoundingClientRect();
-      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      const bounds = containerRef.current?.getBoundingClientRect();
+      if (!bounds) return null;
       return {
-        x: ((clientX - bounds.left) / bounds.width) * 100,
-        y: ((clientY - bounds.top) / bounds.height) * 100,
+        x: ((e.clientX - bounds.left) / bounds.width) * 100,
+        y: ((e.clientY - bounds.top) / bounds.height) * 100,
+        bounds,
       };
     },
     [containerRef]
   );
 
+  const hitTest = useCallback(
+    (pos, pointerType) => {
+      const r = rect;
+      const reach = HANDLE_REACH[pointerType] ?? HANDLE_REACH.mouse;
+      const toPxX = (pct) => (pct / 100) * pos.bounds.width;
+      const toPxY = (pct) => (pct / 100) * pos.bounds.height;
+
+      const corners = [
+        ["nw", r.x, r.y],
+        ["ne", r.x + r.w, r.y],
+        ["sw", r.x, r.y + r.h],
+        ["se", r.x + r.w, r.y + r.h],
+      ];
+
+      let best = null;
+      for (const [mode, cx, cy] of corners) {
+        const dist = Math.hypot(toPxX(pos.x - cx), toPxY(pos.y - cy));
+        if (dist <= reach && (!best || dist < best.dist)) best = { mode, dist };
+      }
+      if (best) return best.mode;
+
+      const inside =
+        pos.x >= r.x && pos.x <= r.x + r.w && pos.y >= r.y && pos.y <= r.y + r.h;
+      return inside ? "move" : null;
+    },
+    [rect]
+  );
+
   const onPointerDown = useCallback(
     (e) => {
-      if (!rectRef.current) return;
-      e.preventDefault();
+      if (!rect || dragRef.current) return;
+      if (e.pointerType === "mouse" && e.button !== 0) return;
       const pos = getRelativePos(e);
-      const r = rectRef.current;
+      if (!pos) return;
 
-      const nearLeft = Math.abs(pos.x - r.x) < 5;
-      const nearRight = Math.abs(pos.x - (r.x + r.w)) < 5;
-      const nearTop = Math.abs(pos.y - r.y) < 5;
-      const nearBottom = Math.abs(pos.y - (r.y + r.h)) < 5;
+      const mode = hitTest(pos, e.pointerType);
+      if (!mode) return;
 
-      if (nearTop && nearLeft) { setDragging("nw"); startRef.current = pos; return; }
-      if (nearTop && nearRight) { setDragging("ne"); startRef.current = pos; return; }
-      if (nearBottom && nearLeft) { setDragging("sw"); startRef.current = pos; return; }
-      if (nearBottom && nearRight) { setDragging("se"); startRef.current = pos; return; }
-
-      const inX = pos.x >= r.x && pos.x <= r.x + r.w;
-      const inY = pos.y >= r.y && pos.y <= r.y + r.h;
-
-      if (inX && inY) { setDragging("move"); startRef.current = pos; return; }
+      e.currentTarget.setPointerCapture(e.pointerId);
+      dragRef.current = {
+        mode,
+        pointerId: e.pointerId,
+        startPos: pos,
+        startRect: rect,
+      };
     },
-    [getRelativePos]
+    [rect, getRelativePos, hitTest]
   );
 
   const onPointerMove = useCallback(
     (e) => {
-      if (!startRef.current || !dragging || !rectRef.current) return;
-      e.preventDefault();
+      const drag = dragRef.current;
+      if (!drag || e.pointerId !== drag.pointerId) return;
       const pos = getRelativePos(e);
-      const dx = pos.x - startRef.current.x;
-      const dy = pos.y - startRef.current.y;
-      const r = { ...rectRef.current };
+      if (!pos) return;
 
-      switch (dragging) {
-        case "move":
-          r.x = Math.max(0, Math.min(100 - r.w, r.x + dx));
-          r.y = Math.max(0, Math.min(100 - r.h, r.y + dy));
-          break;
-        case "nw": r.x += dx; r.y += dy; r.w -= dx; r.h -= dy; break;
-        case "ne": r.y += dy; r.w += dx; r.h -= dy; break;
-        case "sw": r.x += dx; r.w -= dx; r.h += dy; break;
-        case "se": r.w += dx; r.h += dy; break;
-      }
+      const dx = pos.x - drag.startPos.x;
+      const dy = pos.y - drag.startPos.y;
+      const s = drag.startRect;
 
-      if (r.w < 2) r.w = 2;
-      if (r.h < 2) r.h = 2;
+      const next =
+        drag.mode === "move"
+          ? { ...s, x: s.x + dx, y: s.y + dy }
+          : resize(s, drag.mode, dx, dy);
 
-      onChangeRef.current(r);
-      startRef.current = pos;
+      onChangeRef.current(clampRect(next));
     },
-    [dragging, getRelativePos]
+    [getRelativePos]
   );
 
-  const onPointerUp = useCallback(() => {
-    setDragging(null);
-    startRef.current = null;
+  const endDrag = useCallback((e) => {
+    if (dragRef.current?.pointerId === e.pointerId) dragRef.current = null;
   }, []);
 
-  useEffect(() => {
-    const handler = () => {
-      if (dragging) onPointerUp();
-    };
-    window.addEventListener("mouseup", handler);
-    window.addEventListener("touchend", handler);
-    return () => {
-      window.removeEventListener("mouseup", handler);
-      window.removeEventListener("touchend", handler);
-    };
-  }, [dragging, onPointerUp]);
-
   if (!rect || rect.w < 1 || rect.h < 1) return null;
+
+  const box = {
+    left: `${rect.x}%`,
+    top: `${rect.y}%`,
+    width: `${rect.w}%`,
+    height: `${rect.h}%`,
+  };
 
   return (
     <div
       className="selection-overlay"
-      onMouseDown={onPointerDown}
-      onMouseMove={onPointerMove}
-      onTouchStart={onPointerDown}
-      onTouchMove={onPointerMove}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={endDrag}
+      onPointerCancel={endDrag}
       onClick={(e) => e.stopPropagation()}
     >
-      <div
-        className="selection-rect"
-        style={{
-          left: `${rect.x}%`,
-          top: `${rect.y}%`,
-          width: `${rect.w}%`,
-          height: `${rect.h}%`,
-          background: "transparent",
-          boxShadow: `0 0 0 9999px var(--color-bg-scrim)`,
-          pointerEvents: "auto",
-          cursor: "move",
-        }}
-      >
+      {/* Shading is clipped to the image; the rect and its handles are not */}
+      <div className="selection-scrim-clip">
+        <div className="selection-scrim-hole" style={box} />
+      </div>
+      <div className="selection-rect" style={box}>
         <div className="selection-handle nw" />
         <div className="selection-handle ne" />
         <div className="selection-handle sw" />
